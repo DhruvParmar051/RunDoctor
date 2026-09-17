@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from rundoctor import db
-from rundoctor.evals.runner import EvalPaths, completed_keys, entry_key, reset_work_db
-from rundoctor.models import RunConfig
+import db
+from evals.runner import EvalPaths, completed_keys, entry_key, reset_work_db
+from models import RunConfig
 
 
 def test_raw_file_name_is_safe(tmp_path: Path) -> None:

@@ -9,8 +9,8 @@ from typing import Any
 
 import pytest
 
-from rundoctor import db
-from rundoctor.client.host import (
+import db
+from client.host import (
     Agent,
     AssistantTurn,
     Message,
@@ -20,7 +20,7 @@ from rundoctor.client.host import (
     server_parameters,
     strip_thinking,
 )
-from rundoctor.models import Epoch, RunConfig
+from models import Epoch, RunConfig
 
 
 class ScriptedModel:

@@ -1,6 +1,6 @@
 """Training entrypoint. Runs as a detached subprocess launched by the MCP server.
 
-Usage: python -m rundoctor.training.train --run-id N [--db PATH]
+Usage: python -m training.train --run-id N [--db PATH]
 """
 
 from __future__ import annotations
@@ -19,11 +19,11 @@ warnings.filterwarnings("ignore", message="Failed to initialize NumPy")
 import torch  # noqa: E402
 from torch import nn  # noqa: E402
 
-from rundoctor import db  # noqa: E402
-from rundoctor.config import get_settings  # noqa: E402
-from rundoctor.logging import get_logger  # noqa: E402
-from rundoctor.models import Epoch  # noqa: E402
-from rundoctor.training.tasks import build_task  # noqa: E402
+import db  # noqa: E402
+from config import get_settings  # noqa: E402
+from log import get_logger  # noqa: E402
+from models import Epoch  # noqa: E402
+from training.tasks import build_task  # noqa: E402
 
 log = get_logger(__name__)
 

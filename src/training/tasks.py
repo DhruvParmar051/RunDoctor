@@ -7,7 +7,7 @@ import math
 import torch
 from torch import nn
 
-from rundoctor.models import RunConfig, TaskName
+from models import RunConfig, TaskName
 
 SIGNAL_LENGTH = 128
 NUM_CLASSES = 3  # sine, square, sawtooth

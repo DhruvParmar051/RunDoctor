@@ -6,9 +6,9 @@ from typing import Any
 
 import pytest
 
-from rundoctor.client.host import ToolCallRecord, Trajectory
-from rundoctor.evals.report import build_report, load_results
-from rundoctor.evals.scoring import (
+from client.host import ToolCallRecord, Trajectory
+from evals.report import build_report, load_results
+from evals.scoring import (
     AnswerCheck,
     ScoredResult,
     Task,

@@ -59,10 +59,9 @@ rundoctor/
 ├── plan.md
 ├── .gitignore                  # include data/*.db, runs/, results/raw/
 ├── config.toml                 # model list, paths, eval settings
-├── src/rundoctor/
-│   ├── __init__.py
+├── src/                        # import root: modules below are top-level (import db, server, ...)
 │   ├── config.py               # load config.toml -> typed settings
-│   ├── logging.py              # stderr-only logger setup
+│   ├── log.py                  # stderr-only logger setup (not logging.py: would shadow stdlib)
 │   ├── db.py                   # schema, connection, queries
 │   ├── models.py               # pydantic models: Run, Epoch, Diagnosis
 │   ├── training/
@@ -93,7 +92,7 @@ rundoctor/
 
 ## 3. Critical Rules (read before coding)
 
-1. **Never write to stdout in the server process.** stdio transport uses stdout for JSON-RPC, and any `print()` will corrupt it. All logging goes to stderr via `rundoctor.logging`.
+1. **Never write to stdout in the server process.** stdio transport uses stdout for JSON-RPC, and any `print()` will corrupt it. All logging goes to stderr via `log.get_logger`.
 2. **Tools never block on training.** `launch_run` spawns a detached subprocess and returns a `run_id` immediately.
 3. **Tool outputs must be small.** Summarize and downsample. Target <2KB per tool response. Never dump raw per-step metrics.
 4. **Tool schemas stay flat.** Use primitive args, enums where possible, and few optional fields, because small models fail on nested schemas.
@@ -148,7 +147,7 @@ CREATE TABLE epochs (
   - Record ground truth in `evals/ground_truth.json`.
 
 **Acceptance**
-- `uv run python -m rundoctor.training.seed_runs` creates 4 completed runs whose curves visibly match their labels.
+- `uv run python -m training.seed_runs` creates 4 completed runs whose curves visibly match their labels.
 - `pytest tests/test_db.py` passes.
 
 ---
@@ -291,7 +290,7 @@ Categories (about 10 each):
 
 ## 5. Definition of Done
 
-- [ ] `uv sync && uv run python -m rundoctor.training.seed_runs && uv run rundoctor-chat` works from a fresh clone (with Ollama installed)
+- [ ] `uv sync && uv run python -m training.seed_runs && uv run rundoctor-chat` works from a fresh clone (with Ollama installed)
 - [ ] All 6 tools work in MCP Inspector
 - [ ] Planted runs diagnosed correctly by the rule engine (tested)
 - [ ] Eval runs end to end; `results/summary.md` committed with real numbers

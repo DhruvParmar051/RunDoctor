@@ -22,8 +22,8 @@ from mcp.client.stdio import StdioServerParameters, stdio_client
 from openai import AsyncOpenAI, OpenAIError
 from pydantic import BaseModel, Field
 
-from rundoctor.config import get_settings
-from rundoctor.logging import get_logger
+from config import get_settings
+from log import get_logger
 
 log = get_logger(__name__)
 
@@ -162,7 +162,7 @@ def server_parameters(
     server_env.update(env or {})
     return StdioServerParameters(
         command=sys.executable,
-        args=["-m", "rundoctor.server", *extra_args],
+        args=["-m", "server", *extra_args],
         env=server_env,
     )
 

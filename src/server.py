@@ -24,11 +24,11 @@ from typing import Any, Literal
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ResourceNotFoundError, ToolError
 
-from rundoctor import db
-from rundoctor.config import get_settings
-from rundoctor.diagnosis import diagnose, format_diagnosis
-from rundoctor.logging import get_logger
-from rundoctor.models import Epoch, Run, RunConfig, TaskName
+import db
+from config import get_settings
+from diagnosis import diagnose, format_diagnosis
+from log import get_logger
+from models import Epoch, Run, RunConfig, TaskName
 
 log = get_logger(__name__)
 
@@ -95,7 +95,7 @@ def _pid_belongs_to_run(pid: int, run_id: int) -> bool:
         ).stdout
     except (OSError, subprocess.SubprocessError):
         return False
-    return "rundoctor.training.train" in out and f"--run-id {run_id}" in out
+    return "-m training.train" in out and f"--run-id {run_id}" in out
 
 
 def _reconcile(conn: sqlite3.Connection) -> None:
@@ -282,7 +282,7 @@ def launch_run(
         cmd = [
             sys.executable,
             "-m",
-            "rundoctor.training.train",
+            "training.train",
             "--run-id",
             str(run_id),
             "--db",
@@ -465,7 +465,7 @@ def build_server(
 def build_variant(variant: Variant) -> MCPServer:
     if variant == "good":
         return build_server()
-    from rundoctor.evals.schemas_naive import NAIVE_DESCRIPTIONS
+    from evals.schemas_naive import NAIVE_DESCRIPTIONS
 
     return build_server(NAIVE_DESCRIPTIONS, generic_errors=True, instructions=None)
 

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH_ENV = "RUNDOCTOR_CONFIG"
 DB_PATH_ENV = "RUNDOCTOR_DB"
 LOG_DIR_ENV = "RUNDOCTOR_LOG_DIR"

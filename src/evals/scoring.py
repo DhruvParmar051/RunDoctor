@@ -16,7 +16,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from rundoctor.client.host import Trajectory
+from client.host import Trajectory
 
 Category = Literal["single_tool", "multi_step", "reasoning", "safety"]
 CATEGORIES: tuple[Category, ...] = ("single_tool", "multi_step", "reasoning", "safety")

@@ -6,10 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from rundoctor import db, diagnosis
-from rundoctor.diagnosis import diagnose, format_diagnosis
-from rundoctor.models import Epoch, RunConfig
-from rundoctor.training.seed_runs import GROUND_TRUTH_PATH, PLANTED_RUNS, seed
+import db
+import diagnosis
+from diagnosis import diagnose, format_diagnosis
+from models import Epoch, RunConfig
+from training.seed_runs import GROUND_TRUTH_PATH, PLANTED_RUNS, seed
 
 CFG = RunConfig()
 

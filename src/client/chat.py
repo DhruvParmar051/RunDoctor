@@ -10,8 +10,8 @@ from typing import Annotated
 
 import typer
 
-from rundoctor.client.host import Agent, OpenAIChatModel, Trajectory, connect
-from rundoctor.config import get_settings
+from client.host import Agent, OpenAIChatModel, Trajectory, connect
+from config import get_settings
 
 app = typer.Typer(add_completion=False)
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 
-from rundoctor.models import Diagnosis, Epoch, Issue, RunConfig
+from models import Diagnosis, Epoch, Issue, RunConfig
 
 # Divergence: final (finite) train loss is this many times the best train loss ...
 DIVERGENCE_LOSS_RATIO = 2.0

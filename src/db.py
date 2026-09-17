@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
-from rundoctor.models import Epoch, Run, RunConfig, RunStatus, TaskName
+from models import Epoch, Run, RunConfig, RunStatus, TaskName
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (

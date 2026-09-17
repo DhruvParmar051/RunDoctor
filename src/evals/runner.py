@@ -28,13 +28,13 @@ from typing import Annotated, Any, TextIO
 
 import typer
 
-from rundoctor import db
-from rundoctor.client.host import Agent, OpenAIChatModel, connect, server_parameters
-from rundoctor.config import get_settings
-from rundoctor.evals.scoring import Task, load_tasks, score
-from rundoctor.logging import get_logger
-from rundoctor.server import _pid_belongs_to_run
-from rundoctor.training.seed_runs import seed
+import db
+from client.host import Agent, OpenAIChatModel, connect, server_parameters
+from config import get_settings
+from evals.scoring import Task, load_tasks, score
+from log import get_logger
+from server import _pid_belongs_to_run
+from training.seed_runs import seed
 
 log = get_logger(__name__)
 
@@ -278,7 +278,7 @@ def main(
     no_report: Annotated[bool, typer.Option(help="don't write summary.md after running")] = False,
 ) -> None:
     """Run the RunDoctor tool-use eval and write results/summary.md."""
-    from rundoctor.evals.report import write_report
+    from evals.report import write_report
 
     settings = get_settings()
     paths = EvalPaths(results_dir or settings.results_dir)

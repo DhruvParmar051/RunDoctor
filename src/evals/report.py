@@ -8,9 +8,9 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
-from rundoctor.client.host import Trajectory
-from rundoctor.evals.runner import iter_records
-from rundoctor.evals.scoring import (
+from client.host import Trajectory
+from evals.runner import iter_records
+from evals.scoring import (
     CATEGORIES,
     FAILURE_CLASSES,
     GroupMetrics,
@@ -20,7 +20,7 @@ from rundoctor.evals.scoring import (
     load_tasks,
     score,
 )
-from rundoctor.logging import get_logger
+from log import get_logger
 
 log = get_logger(__name__)
 
@@ -301,8 +301,7 @@ def build_report(
         "(good = frozen descriptions + informative errors; naive = terse descriptions + "
         "`error`)",
         f"- **Repeats:** {len(repeats)} · **Trajectories scored:** {len(results)}",
-        "- **Scoring:** deterministic checks only (no LLM judge). See "
-        "`src/rundoctor/evals/scoring.py`.",
+        "- **Scoring:** deterministic checks only (no LLM judge). See `src/evals/scoring.py`.",
         "",
     ]
     n_main = sum(task_counts.values())

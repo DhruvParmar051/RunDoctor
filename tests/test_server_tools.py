@@ -11,8 +11,9 @@ from mcp.client.session import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from mcp.server.mcpserver.exceptions import ToolError
 
-from rundoctor import db, server
-from rundoctor.models import Epoch, RunConfig
+import db
+import server
+from models import Epoch, RunConfig
 
 
 def _add_run(conn: object, name: str, cfg: RunConfig, train: list[float], val: list[float]) -> int:
@@ -237,7 +238,7 @@ def test_stdio_server(db_path: Path) -> None:
     async def run() -> None:
         params = StdioServerParameters(
             command=sys.executable,
-            args=["-m", "rundoctor.server"],
+            args=["-m", "server"],
             env={"RUNDOCTOR_DB": str(db_path), "RUNDOCTOR_LOG_LEVEL": "WARNING"},
         )
         async with stdio_client(params) as (read, write), ClientSession(read, write) as session:

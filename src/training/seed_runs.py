@@ -1,6 +1,6 @@
 """Reset the DB and create the 4 planted demo runs with known problems.
 
-Usage: python -m rundoctor.training.seed_runs [--db PATH]
+Usage: python -m training.seed_runs [--db PATH]
 """
 
 from __future__ import annotations
@@ -11,10 +11,10 @@ import math
 import time
 from pathlib import Path
 
-from rundoctor import db
-from rundoctor.config import get_settings
-from rundoctor.models import IssueCode, RunConfig
-from rundoctor.training.train import train_run
+import db
+from config import get_settings
+from models import IssueCode, RunConfig
+from training.train import train_run
 
 GROUND_TRUTH_PATH = Path(__file__).resolve().parents[1] / "evals" / "ground_truth.json"
 

@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from rundoctor import db
-from rundoctor.models import Epoch, RunConfig
+import db
+from models import Epoch, RunConfig
 
 
 @pytest.fixture
