@@ -23,7 +23,7 @@ dev = [
 [project.scripts]
 rundoctor-server = "rundoctor.server:main"
 rundoctor-chat = "rundoctor.client.chat:run"
-rundoctor-eval = "rundoctor.evals.runner:main"
+rundoctor-eval = "rundoctor.evals.runner:run"
 
 [build-system]
 requires = ["hatchling"]
@@ -38,6 +38,8 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+# Report output intentionally uses typographic dashes and minus signs.
+ignore = ["RUF001"]
 
 [tool.mypy]
 strict = true

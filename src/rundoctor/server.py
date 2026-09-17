@@ -9,6 +9,7 @@ Never write to stdout here: stdio transport uses it for JSON-RPC.
 
 from __future__ import annotations
 
+import argparse
 import json
 import math
 import os
@@ -405,6 +406,11 @@ GOOD_DESCRIPTIONS: dict[str, str] = {
     ),
 }
 
+SERVER_INSTRUCTIONS = (
+    "Inspect, diagnose, compare, launch, and stop small ML training runs. "
+    "Start with list_runs to find run ids."
+)
+
 TOOL_FUNCTIONS: dict[str, Callable[..., str]] = {
     "list_runs": list_runs,
     "get_training_curve": get_training_curve,
@@ -415,26 +421,34 @@ TOOL_FUNCTIONS: dict[str, Callable[..., str]] = {
 }
 
 
+class _GenericErrorServer(MCPServer):
+    """Replaces every tool error message with a bare ``error`` (naive eval variant)."""
+
+    async def call_tool(self, name: str, arguments: dict[str, Any], context: Any = None) -> Any:
+        try:
+            return await super().call_tool(name, arguments, context)
+        except ToolError as exc:
+            raise ToolError("error") from exc
+
+
+Variant = Literal["good", "naive"]
+
+
 def build_server(
     descriptions: Mapping[str, str] | None = None,
-    wrap: Callable[[Callable[..., str]], Callable[..., str]] | None = None,
+    generic_errors: bool = False,
+    instructions: str | None = SERVER_INSTRUCTIONS,
 ) -> MCPServer:
     """Create the MCP server.
 
-    ``descriptions`` overrides tool descriptions and ``wrap`` can rewrap each tool
-    function (e.g. to replace error messages); both exist for the eval's schema variants.
+    ``descriptions`` and ``generic_errors`` exist for the eval's naive schema variant.
     """
     descriptions = descriptions or GOOD_DESCRIPTIONS
-    server = MCPServer(
-        name="rundoctor",
-        instructions=(
-            "Inspect, diagnose, compare, launch, and stop small ML training runs. "
-            "Start with list_runs to find run ids."
-        ),
-    )
+    server_cls = _GenericErrorServer if generic_errors else MCPServer
+    server = server_cls(name="rundoctor", instructions=instructions)
     for tool_name, fn in TOOL_FUNCTIONS.items():
         server.add_tool(
-            wrap(fn) if wrap else fn,
+            fn,
             name=tool_name,
             description=descriptions[tool_name],
             structured_output=False,
@@ -448,9 +462,27 @@ def build_server(
     return server
 
 
-def main() -> None:
-    log.info("starting rundoctor MCP server (db=%s)", get_settings().db_path)
-    build_server().run("stdio")
+def build_variant(variant: Variant) -> MCPServer:
+    if variant == "good":
+        return build_server()
+    from rundoctor.evals.schemas_naive import NAIVE_DESCRIPTIONS
+
+    return build_server(NAIVE_DESCRIPTIONS, generic_errors=True, instructions=None)
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="RunDoctor MCP server (stdio).")
+    parser.add_argument(
+        "--variant",
+        choices=["good", "naive"],
+        default="good",
+        help="tool schema variant (naive is the eval ablation)",
+    )
+    args = parser.parse_args(argv)
+    log.info(
+        "starting rundoctor MCP server (variant=%s, db=%s)", args.variant, get_settings().db_path
+    )
+    build_variant(args.variant).run("stdio")
 
 
 if __name__ == "__main__":
