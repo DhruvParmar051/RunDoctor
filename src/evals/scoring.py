@@ -150,9 +150,18 @@ def _primary_run_id(text: str) -> int | None:
     return ranked[0][0]
 
 
+_NO_MATCH = object()
+
+
 def _values_match(expected: Any, actual: Any) -> bool:
-    if isinstance(expected, bool) or isinstance(actual, bool):
-        return expected is actual or expected == actual
+    # Models often send primitives as strings ("true", "4", "[2, 4]"); the server's
+    # validation coerces them, so they must count as the same value here too.
+    if isinstance(expected, bool):
+        if isinstance(actual, str):
+            return actual.strip().lower() == str(expected).lower()
+        return bool(expected == actual)
+    if isinstance(actual, bool):
+        return bool(expected == actual)
     if isinstance(expected, int | float) and isinstance(actual, int | float | str):
         try:
             return math.isclose(float(expected), float(actual), rel_tol=1e-6, abs_tol=1e-12)
@@ -160,8 +169,21 @@ def _values_match(expected: Any, actual: Any) -> bool:
             return False
     if isinstance(expected, str) and isinstance(actual, str):
         return expected.strip().lower() == actual.strip().lower()
+    if isinstance(expected, list) and isinstance(actual, str):
+        try:
+            actual = json.loads(actual)
+        except ValueError:
+            return False
     if isinstance(expected, list) and isinstance(actual, list):
-        return sorted(map(json.dumps, expected)) == sorted(map(json.dumps, actual))
+        if len(expected) != len(actual):
+            return False
+        remaining = list(actual)
+        for item in expected:
+            match = next((a for a in remaining if _values_match(item, a)), _NO_MATCH)
+            if match is _NO_MATCH:
+                return False
+            remaining.remove(match)
+        return True
     return bool(expected == actual)
 
 
