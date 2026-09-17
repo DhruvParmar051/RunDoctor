@@ -130,6 +130,10 @@ def test_run_id_mentions() -> None:
     assert not run_check(ok, traj([], answer="Run 2, unlike run 4, overfits."))  # tie
     assert not run_check(ok, traj([], answer="Run 4 is the one."))
     assert not run_check(ok, traj([], answer="It's the overfitting one."))
+    for bare in ("2", "**2**", "`2`.", " 2\n"):
+        assert run_check(ok, traj([], answer=bare)), bare
+    assert not run_check(ok, traj([], answer="4"))
+    assert not run_check(ok, traj([], answer="2 or 4"))
 
 
 def test_tool_checks() -> None:

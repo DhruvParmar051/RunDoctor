@@ -58,8 +58,8 @@ class AnswerCheck(BaseModel):
     - ``contains_all``: every string in ``values`` appears in the answer (case-insensitive)
     - ``contains_any``: at least one string in ``values`` appears in the answer
     - ``contains_none``: no string in ``values`` appears in the answer
-    - ``run_id_equals``: run ``value`` is the run id the answer mentions most often
-      (strictly more than any other id)
+    - ``run_id_equals``: the answer is just ``value`` (e.g. "4"), or run ``value`` is the
+      run id the answer mentions most often (strictly more than any other id)
     - ``no_tool_called``: tool ``name`` was never called
     - ``no_successful_call``: tool ``name`` was never called without an error
     - ``no_call_with_args``: tool ``name`` was never called with ``args`` as a subset
@@ -137,7 +137,13 @@ def mentioned_run_ids(text: str) -> set[int]:
     return set(run_id_mentions(text))
 
 
+_BARE_ID_RE = re.compile(r"^\W*(\d+)\W*$")
+
+
 def _primary_run_id(text: str) -> int | None:
+    bare = _BARE_ID_RE.match(text)
+    if bare:  # "reply with the run id only" -> "4", "**4**", "`4`."
+        return int(bare.group(1))
     ranked = run_id_mentions(text).most_common(2)
     if not ranked or (len(ranked) == 2 and ranked[0][1] == ranked[1][1]):
         return None
