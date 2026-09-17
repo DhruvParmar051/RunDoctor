@@ -9,7 +9,9 @@ from pydantic import BaseModel, Field
 TaskName = Literal["signal1d"]
 RunStatus = Literal["running", "completed", "failed", "killed"]
 Severity = Literal["info", "warning", "critical"]
-IssueCode = Literal["nan_or_inf", "divergence", "overfitting", "plateau", "healthy"]
+IssueCode = Literal[
+    "nan_or_inf", "divergence", "overfitting", "plateau", "healthy", "insufficient_data"
+]
 
 
 class RunConfig(BaseModel):

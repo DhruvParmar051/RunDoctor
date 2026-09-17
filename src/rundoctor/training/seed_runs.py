@@ -53,7 +53,7 @@ def _fmt(values: list[float | None]) -> str:
     return " ".join("nan" if v is None or not math.isfinite(v) else f"{v:.3f}" for v in values)
 
 
-def seed(db_path: Path) -> dict[str, int]:
+def seed(db_path: Path, verbose: bool = True, write_ground_truth: bool = True) -> dict[str, int]:
     ids: dict[str, int] = {}
     with db.connection(db_path) as conn:
         db.reset_db(conn)
@@ -66,11 +66,15 @@ def seed(db_path: Path) -> dict[str, int]:
             run = db.get_run(conn, run_id)
             epochs = db.get_epochs(conn, run_id)
             status = run.status if run else "?"
+            if not verbose:
+                continue
             print(f"[{run_id}] {name}: {status}, {len(epochs)} epochs, {elapsed:.1f}s")
             print(f"    train_loss: {_fmt([e.train_loss for e in epochs])}")
             print(f"    val_loss:   {_fmt([e.val_loss for e in epochs])}")
             print(f"    val_acc:    {_fmt([e.val_acc for e in epochs])}")
 
+    if not write_ground_truth:
+        return ids
     truth = {
         name: {"run_id": ids[name], "expected_issues": codes}
         for name, (_, codes) in PLANTED_RUNS.items()
