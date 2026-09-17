@@ -9,3 +9,5 @@ data/*.db-*
 runs/
 results/raw/
 .DS_Store
+results/*.log
+results/archive/

@@ -40,6 +40,7 @@ class EvalSettings(_Frozen):
     temperature: float = 0.2
     repeats: int = 3
     max_iterations: int = 8
+    workers_per_model: int = 1
 
 
 class Settings(_Frozen):

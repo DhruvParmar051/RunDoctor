@@ -12,12 +12,14 @@ eval = ["qwen3:8b", "llama3.1:8b", "mistral"]
 chat_default = "qwen3:8b"
 
 [models.reasoning_effort]
-# "none" disables qwen3's thinking mode: several times faster, and results are recorded
-# as "qwen3:8b[reasoning=none]" so they never mix with thinking-mode results.
-# Delete the line to evaluate qwen3 with thinking on.
-"qwen3:8b" = "none"
+# Empty = each model's default (qwen3 thinks). Setting e.g. "qwen3:8b" = "none" disables
+# qwen3's thinking mode: several times faster, and results are recorded as
+# "qwen3:8b[reasoning=none]" so they never mix with thinking-mode results.
 
 [eval]
 temperature = 0.2
 repeats = 3
 max_iterations = 8
+# Models always run in parallel with each other. More workers per model only helps if
+# Ollama serves concurrent requests per model (OLLAMA_NUM_PARALLEL > 1).
+workers_per_model = 1

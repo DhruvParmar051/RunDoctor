@@ -24,12 +24,20 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Any, TextIO
+from typing import Annotated, Any
 
 import typer
+from mcp.client.session import ClientSession
 
 import db
-from client.host import Agent, OpenAIChatModel, connect, server_parameters
+from client.host import (
+    Agent,
+    Message,
+    OpenAIChatModel,
+    connect,
+    mcp_tools_to_openai,
+    server_parameters,
+)
 from config import get_settings
 from evals.scoring import Task, load_tasks, score
 from log import get_logger
@@ -63,10 +71,6 @@ class EvalPaths:
     @property
     def template_db(self) -> Path:
         return self.work / "template.db"
-
-    @property
-    def work_db(self) -> Path:
-        return self.work / "eval.db"
 
     @property
     def summary(self) -> Path:
@@ -129,11 +133,11 @@ def stop_launched_runs(db_path: Path) -> None:
                 os.killpg(run.pid, signal.SIGKILL)
 
 
-def reset_work_db(paths: EvalPaths) -> None:
-    """Restore the work DB to the seeded state."""
-    stop_launched_runs(paths.work_db)
-    src = sqlite3.connect(paths.template_db)
-    dst = sqlite3.connect(paths.work_db)
+def reset_work_db(template_db: Path, work_db: Path) -> None:
+    """Restore a worker's DB to the seeded state."""
+    stop_launched_runs(work_db)
+    src = sqlite3.connect(template_db)
+    dst = sqlite3.connect(work_db)
     try:
         src.backup(dst)
     finally:
@@ -172,6 +176,7 @@ class RunPlan:
     max_iterations: int
     temperature: float
     reasoning_effort: dict[str, str] = field(default_factory=dict)
+    workers_per_model: int = 1
 
     @property
     def labels(self) -> dict[str, str]:
@@ -181,100 +186,136 @@ class RunPlan:
         }
 
 
-async def _run_block(
+@dataclass(frozen=True)
+class WorkerSlot:
+    """Private state for one parallel worker: its own DB copy, logs, and server processes."""
+
+    index: int
+    root: Path
+
+    @property
+    def db(self) -> Path:
+        return self.root / "eval.db"
+
+    @property
+    def logs(self) -> Path:
+        return self.root / "logs"
+
+
+Unit = tuple[str, int, Task]  # (variant, repeat, task)
+
+
+async def _worker(
     plan: RunPlan,
     model: str,
-    variant: str,
-    todo: list[tuple[int, Task]],
+    queue: asyncio.Queue[Unit],
+    slot: WorkerSlot,
     paths: EvalPaths,
     progress: dict[str, int],
-    server_log: TextIO,
 ) -> None:
-    """Run all pending (repeat, task) pairs for one model and variant in one server session."""
-    params = server_parameters(
-        extra_args=["--variant", variant],
-        env={
-            "RUNDOCTOR_DB": str(paths.work_db),
-            "RUNDOCTOR_LOG_DIR": str(paths.work / "logs"),
-        },
-    )
+    """Pull (variant, repeat, task) units for one model until the queue is empty."""
     label = plan.labels[model]
-    out_path = paths.raw_file(label, variant)
-    async with connect(params, errlog=server_log) as session:
-        for repeat, task in todo:
-            reset_work_db(paths)
-            llm = OpenAIChatModel(
-                model,
-                temperature=plan.temperature,
-                seed=repeat,
-                reasoning_effort=plan.reasoning_effort.get(model),
-            )
-            agent = await Agent.create(session, llm, max_iterations=plan.max_iterations)
-            traj = await agent.run(task.prompt)
-            if traj.stop_reason == "llm_error":
-                raise OllamaUnavailableError(
-                    f"{model} failed on {task.id}: {traj.error}. Fix it and rerun to resume."
+    slot.root.mkdir(parents=True, exist_ok=True)
+    async with contextlib.AsyncExitStack() as stack:
+        server_log = stack.enter_context((slot.root / "server.log").open("a"))
+        sessions: dict[str, ClientSession] = {}
+        tools: dict[str, list[Message]] = {}
+        try:
+            while True:
+                try:
+                    variant, repeat, task = queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    return
+                if variant not in sessions:
+                    params = server_parameters(
+                        extra_args=["--variant", variant],
+                        env={"RUNDOCTOR_DB": str(slot.db), "RUNDOCTOR_LOG_DIR": str(slot.logs)},
+                    )
+                    session = await stack.enter_async_context(connect(params, errlog=server_log))
+                    sessions[variant] = session
+                    tools[variant] = mcp_tools_to_openai((await session.list_tools()).tools)
+
+                reset_work_db(paths.template_db, slot.db)
+                llm = OpenAIChatModel(
+                    model,
+                    temperature=plan.temperature,
+                    seed=repeat,
+                    reasoning_effort=plan.reasoning_effort.get(model),
                 )
-            record = {
-                "task_id": task.id,
-                "category": task.category,
-                "model": label,
-                "ollama_model": model,
-                "reasoning_effort": plan.reasoning_effort.get(model),
-                "variant": variant,
-                "repeat": repeat,
-                "seed": repeat,
-                "temperature": plan.temperature,
-                "timestamp": datetime.now(UTC).isoformat(timespec="seconds"),
-                "trajectory": traj.model_dump(mode="json"),
-            }
-            with out_path.open("a") as f:
-                f.write(json.dumps(record) + "\n")
-            progress["done"] += 1
-            s = score(task, traj)
-            mark = "✓" if s.task_success else f"✗ {s.failure}"
-            typer.echo(
-                f"[{progress['done']}/{progress['total']}] {label} {variant} r{repeat} "
-                f"{task.id}: {mark} ({traj.stop_reason}, {len(traj.tool_calls)} calls, "
-                f"{traj.total_latency_s:.1f}s)",
-                err=True,
-            )
-    stop_launched_runs(paths.work_db)
+                agent = Agent(
+                    sessions[variant], llm, tools[variant], max_iterations=plan.max_iterations
+                )
+                traj = await agent.run(task.prompt)
+                if traj.stop_reason == "llm_error":
+                    raise OllamaUnavailableError(
+                        f"{model} failed on {task.id}: {traj.error}. Fix it and rerun to resume."
+                    )
+                record = {
+                    "task_id": task.id,
+                    "category": task.category,
+                    "model": label,
+                    "ollama_model": model,
+                    "reasoning_effort": plan.reasoning_effort.get(model),
+                    "variant": variant,
+                    "repeat": repeat,
+                    "seed": repeat,
+                    "temperature": plan.temperature,
+                    "timestamp": datetime.now(UTC).isoformat(timespec="seconds"),
+                    "trajectory": traj.model_dump(mode="json"),
+                }
+                # Single event loop, synchronous write: lines from workers never interleave.
+                with paths.raw_file(label, variant).open("a") as f:
+                    f.write(json.dumps(record) + "\n")
+                progress["done"] += 1
+                s = score(task, traj)
+                mark = "✓" if s.task_success else f"✗ {s.failure}"
+                typer.echo(
+                    f"[{progress['done']}/{progress['total']}] {label} {variant} r{repeat} "
+                    f"{task.id}: {mark} ({traj.stop_reason}, {len(traj.tool_calls)} calls, "
+                    f"{traj.total_latency_s:.1f}s)",
+                    err=True,
+                )
+        finally:
+            stop_launched_runs(slot.db)
 
 
 async def run_eval(plan: RunPlan, paths: EvalPaths) -> int:
     paths.raw.mkdir(parents=True, exist_ok=True)
     done = completed_keys(paths.raw)
-    blocks: list[tuple[str, str, list[tuple[int, Task]]]] = []
+    queues: dict[str, asyncio.Queue[Unit]] = {}
     for model in plan.models:
-        for variant in plan.variants:
-            todo = [
-                (r, t)
-                for r in range(plan.repeats)
-                for t in plan.tasks
-                if entry_key(t.id, plan.labels[model], variant, r) not in done
-            ]
-            if todo:
-                blocks.append((model, variant, todo))
-    total = sum(len(t) for _, _, t in blocks)
+        queue: asyncio.Queue[Unit] = asyncio.Queue()
+        # Repeat-first order, so an interrupted run still has complete repeats to report.
+        for r in range(plan.repeats):
+            for variant in plan.variants:
+                for t in plan.tasks:
+                    if entry_key(t.id, plan.labels[model], variant, r) not in done:
+                        queue.put_nowait((variant, r, t))
+        if not queue.empty():
+            queues[model] = queue
+    total = sum(q.qsize() for q in queues.values())
     planned = len(plan.tasks) * len(plan.models) * len(plan.variants) * plan.repeats
     typer.echo(
-        f"{planned} trajectories planned, {planned - total} already done, {total} to run.",
+        f"{planned} trajectories planned, {planned - total} already done, {total} to run "
+        f"({plan.workers_per_model} worker(s) per model).",
         err=True,
     )
     if not total:
         return 0
 
     progress = {"done": 0, "total": total}
-    with (paths.work / "server.log").open("a") as server_log:
-        for model, variant, todo in blocks:
-            start = time.perf_counter()
-            await _run_block(plan, model, variant, todo, paths, progress, server_log)
-            typer.echo(
-                f"finished {plan.labels[model]} / {variant}: {len(todo)} trajectories in "
-                f"{time.perf_counter() - start:.0f}s",
-                err=True,
-            )
+    start = time.perf_counter()
+    slot_index = 0
+    try:
+        async with asyncio.TaskGroup() as group:
+            for model, queue in queues.items():
+                for _ in range(plan.workers_per_model):
+                    slot = WorkerSlot(slot_index, paths.work / f"w{slot_index}")
+                    slot_index += 1
+                    group.create_task(_worker(plan, model, queue, slot, paths, progress))
+    except* OllamaUnavailableError as eg:
+        raise eg.exceptions[0] from None
+    typer.echo(f"finished {total} trajectories in {time.perf_counter() - start:.0f}s", err=True)
     return total
 
 
@@ -294,6 +335,13 @@ def main(
     results_dir: Annotated[Path | None, typer.Option(help="output directory")] = None,
     max_iterations: Annotated[int | None, typer.Option(help="agent loop limit")] = None,
     reseed: Annotated[bool, typer.Option(help="rebuild the seeded template DB")] = False,
+    workers_per_model: Annotated[
+        int | None,
+        typer.Option(
+            help="parallel workers per model (default: config). Models always run in "
+            "parallel; >1 only helps if Ollama's OLLAMA_NUM_PARALLEL is raised too."
+        ),
+    ] = None,
     report_only: Annotated[bool, typer.Option(help="skip running; just write the report")] = False,
     no_report: Annotated[bool, typer.Option(help="don't write summary.md after running")] = False,
 ) -> None:
@@ -336,6 +384,7 @@ def main(
             repeats=repeats if repeats is not None else settings.eval.repeats,
             max_iterations=max_iterations or settings.eval.max_iterations,
             temperature=settings.eval.temperature,
+            workers_per_model=max(1, workers_per_model or settings.eval.workers_per_model),
             reasoning_effort={
                 m: e for m, e in settings.models.reasoning_effort.items() if m in model_list
             },
@@ -348,7 +397,8 @@ def main(
             raise typer.Exit(1) from exc
         except KeyboardInterrupt:
             typer.secho("\ninterrupted; rerun the same command to resume", fg="yellow", err=True)
-            stop_launched_runs(paths.work_db)
+            for slot_db in paths.work.glob("w*/eval.db"):
+                stop_launched_runs(slot_db)
             raise typer.Exit(130) from None
 
     if not no_report:
