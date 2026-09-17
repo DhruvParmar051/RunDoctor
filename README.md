@@ -99,7 +99,31 @@ Resource: `runs://{run_id}` returns a run's config and outcome summary as JSON.
 ## Eval results
 
 <!-- RESULTS:START -->
-> ⏳ The full eval (3 models × 3 variants × 40 tasks × 3 repeats = 1,080 trajectories) is running. This section will be filled from [`results/summary.md`](results/summary.md) when it finishes.
+3 models × 3 variants × 40 tasks × 3 repeats = **1,080 scored trajectories** (Apple Silicon, Ollama 0.32, default quantization, qwen3 thinking on). Values are mean ± std across repeats. The full report, with per-category results, the failure taxonomy and example transcripts, is in [`results/summary.md`](results/summary.md).
+
+| Model | Variant | Task success | Tool selection | Arg acc | Safety pass | Text calls | p50 latency |
+|---|---|---|---|---|---|---|---|
+| `qwen3:8b` | good | **74% ± 3** | 85% ± 3 | 75% ± 5 | **80%** | 0% | 41.6s |
+| `qwen3:8b` | naive | 48% ± 4 | 76% ± 3 | 55% ± 7 | 23% ± 6 | 0% | 45.5s |
+| `qwen3:8b` | v2 † | 82% ± 6 | 92% ± 1 | 82% ± 2 | 97% ± 6 | 0% | 40.7s |
+| `llama3.1:8b` | good | 62% ± 8 | 91% ± 1 | 50% | 40% ± 10 | 16% ± 3 | 13.9s |
+| `llama3.1:8b` | naive | 46% ± 1 | 88% ± 3 | 40% | 30% | 30% ± 6 | 15.9s |
+| `llama3.1:8b` | v2 † | 65% ± 5 | 95% | 58% ± 2 | 37% ± 12 | 14% ± 2 | 13.1s |
+| `mistral` | good | 10% ± 2 | 27% ± 3 | 2% ± 4 | 37% ± 6 | 0% | 12.3s |
+| `mistral` | naive | 14% ± 1 | 42% ± 5 | 14% ± 2 | 17% ± 6 | 51% ± 27 | 18.0s |
+| `mistral` | v2 † | 10% | 26% ± 1 | 1% ± 2 | 37% ± 6 | 33% ± 58 | 9.4s |
+
+† v2 descriptions were written after seeing the `good` failures, so these numbers are optimistic until the held-out tasks are written.
+
+**Key findings**
+
+1. **Good tool descriptions and informative errors matter a lot for the models that use tools well.** Compared with `naive`, `good` raised task success by **+26 pp for qwen3:8b** and **+16 pp for llama3.1:8b**. For qwen3, most of the gain was on safety tasks: 23% → 80% (+57 pp). Its `naive` failures are mostly wrong tools and wrong answers after vague `error` messages.
+2. **qwen3:8b is the most accurate and the safest, but also the slowest.** With `good` descriptions it has the highest success rate and 0% malformed calls. With thinking on, its p50 latency is about 3× llama3.1's (42s vs 14s).
+3. **llama3.1:8b chooses tools well but gets the arguments and safety wrong.** It has the best tool selection (91%), but low argument accuracy (50%) and a low safety pass rate (40%). It often writes tool calls as JSON text instead of structured calls (16–30% of calls, recovered by the host). The `naive` variant doubles this rate and triples hallucinated tools.
+4. **mistral (7B) mostly fails at tool use in this setup.** With detailed descriptions plus a system prompt, it answers without calling any tool in about 73% of trajectories: 88 of 120 failures are `gave_up`, and it often writes Python snippets instead. Terse `naive` descriptions actually get more tool calls out of it. Its "Text calls" figures are based on very few calls, which is why the std is so high.
+5. **Post-hoc `v2` descriptions helped qwen3 further** (+8 pp success, safety 97%), gave llama3.1 a smaller gain, and did nothing for mistral. Held-out tasks are needed before trusting these gains.
+
+**Recommendation:** use `qwen3:8b` with the default (`good`) server. It is the default in `config.toml`. If latency matters more than safety, `llama3.1:8b` is about 3× faster but passes only about 40% of safety tasks.
 <!-- RESULTS:END -->
 
 ### How the eval works
