@@ -4,7 +4,7 @@
 
 ![RunDoctor chat diagnosing four planted runs](docs/demo.gif)
 
-<sub>Recording: `vhs docs/demo.tape` (see [Recording the demo](#recording-the-demo)).</sub>
+<sub>qwen3:8b on an Apple Silicon laptop. Waiting time is trimmed; the real per-turn times are shown in the grey footers (30.2s and 20.0s). See [Recording the demo](#recording-the-demo).</sub>
 
 RunDoctor has three parts:
 
@@ -271,4 +271,13 @@ CI (`.github/workflows/ci.yml`) runs lint, type checks, and tests on every push 
 brew install vhs
 uv run python -m training.seed_runs
 vhs docs/demo.tape       # writes docs/demo.gif
+```
+
+With vhs 0.12 and ffmpeg 9, vhs can capture the frames but then fail to write the GIF without reporting an error. The published GIF was made by having vhs save the frames (`Output demo_frames/` in the tape) and encoding them with ffmpeg, which also trims waiting time:
+
+```bash
+cd demo_frames && ffmpeg -f lavfi -i color=c=0x1e1e2e:s=1300x800:r=50 \
+  -framerate 50 -i frame-text-%05d.png -framerate 50 -i frame-cursor-%05d.png \
+  -filter_complex "[0][1]overlay=35:30:shortest=1[a];[a][2]overlay=35:30,fps=10,mpdecimate,setpts=N/10/TB,tpad=stop_mode=clone:stop_duration=6,scale=1000:-1,split[x][y];[x]palettegen=max_colors=64:stats_mode=diff[p];[y][p]paletteuse=dither=none" \
+  -r 10 ../docs/demo.gif
 ```
