@@ -309,12 +309,13 @@ def _result(t: Task, tr: Trajectory, repeat: int, variant: str = "good") -> Scor
 def test_aggregate_mean_std_over_repeats() -> None:
     good = traj([rec("diagnose_run", {"run_id": 3})], answer="plateau", latency=1.0)
     bad = traj([rec("list_runs", {})], answer="?", latency=3.0)
+    listed = traj([rec("list_runs", {})], answer="plateau", latency=1.0)
     other = task(id="u", expected_tools=["list_runs"])
     results = [
         _result(DIAG3, good, 0),
         _result(other, bad, 0),  # repeat 0: 1/2 success
         _result(DIAG3, good, 1),
-        _result(other, good, 1),  # repeat 1: 2/2 success
+        _result(other, listed, 1),  # repeat 1: 2/2 success
     ]
     (g,) = aggregate(results)
     ts = g.metrics["task_success"]
@@ -405,3 +406,13 @@ def test_text_call_rate() -> None:
     tr.text_tool_calls = 1
     (g,) = aggregate([_result(DIAG3, tr, 0)])
     assert g.metrics["text_call_rate"].mean == 1.0
+
+
+def test_correct_sounding_guess_without_tools_fails() -> None:
+    t = task(
+        expected_tools=["list_runs"],
+        answer_check={"type": "contains_any", "values": ["completed"]},
+    )
+    s = score(t, traj([], answer="All your runs are completed."))
+    assert not s.task_success
+    assert s.failure == "gave_up"

@@ -261,7 +261,13 @@ def classify_failure(
 def score(task: Task, traj: Trajectory) -> Score:
     selection = tool_selection_ok(task, traj)
     arg_acc = arg_accuracy(task, traj)
-    success = traj.stop_reason == "answer" and all(run_check(c, traj) for c in task.answer_check)
+    # An answer only counts if the model actually used the tools the task needs:
+    # a right-sounding guess made without them is not a success.
+    success = (
+        traj.stop_reason == "answer"
+        and selection
+        and all(run_check(c, traj) for c in task.answer_check)
+    )
     return Score(
         tool_selection=selection,
         arg_acc=arg_acc,

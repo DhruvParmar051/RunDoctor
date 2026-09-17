@@ -177,6 +177,7 @@ class RunPlan:
     temperature: float
     reasoning_effort: dict[str, str] = field(default_factory=dict)
     workers_per_model: int = 1
+    max_tokens: int | None = None
 
     @property
     def labels(self) -> dict[str, str]:
@@ -212,6 +213,7 @@ async def _worker(
     slot: WorkerSlot,
     paths: EvalPaths,
     progress: dict[str, int],
+    stop: asyncio.Event,
 ) -> None:
     """Pull (variant, repeat, task) units for one model until the queue is empty."""
     label = plan.labels[model]
@@ -221,7 +223,7 @@ async def _worker(
         sessions: dict[str, ClientSession] = {}
         tools: dict[str, list[Message]] = {}
         try:
-            while True:
+            while not stop.is_set():
                 try:
                     variant, repeat, task = queue.get_nowait()
                 except asyncio.QueueEmpty:
@@ -241,6 +243,7 @@ async def _worker(
                     temperature=plan.temperature,
                     seed=repeat,
                     reasoning_effort=plan.reasoning_effort.get(model),
+                    max_tokens=plan.max_tokens,
                 )
                 agent = Agent(
                     sessions[variant], llm, tools[variant], max_iterations=plan.max_iterations
@@ -260,6 +263,7 @@ async def _worker(
                     "repeat": repeat,
                     "seed": repeat,
                     "temperature": plan.temperature,
+                    "max_tokens": plan.max_tokens,
                     "timestamp": datetime.now(UTC).isoformat(timespec="seconds"),
                     "trajectory": traj.model_dump(mode="json"),
                 }
@@ -305,16 +309,44 @@ async def run_eval(plan: RunPlan, paths: EvalPaths) -> int:
 
     progress = {"done": 0, "total": total}
     start = time.perf_counter()
-    slot_index = 0
+    stop = asyncio.Event()
+    slots = [
+        WorkerSlot(i, paths.work / f"w{i}") for i in range(len(queues) * plan.workers_per_model)
+    ]
+
+    def on_signal() -> None:
+        if not stop.is_set():
+            stop.set()
+            typer.secho(
+                "\nstopping after in-flight tasks finish (press Ctrl-C again to abort now)",
+                fg="yellow",
+                err=True,
+            )
+            return
+        # Second signal: abort. Server processes exit when our pipes close.
+        for slot in slots:
+            stop_launched_runs(slot.db)
+        typer.secho("aborted; rerun the same command to resume", fg="yellow", err=True)
+        os._exit(130)
+
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, on_signal)
     try:
         async with asyncio.TaskGroup() as group:
+            workers = iter(slots)
             for model, queue in queues.items():
                 for _ in range(plan.workers_per_model):
-                    slot = WorkerSlot(slot_index, paths.work / f"w{slot_index}")
-                    slot_index += 1
-                    group.create_task(_worker(plan, model, queue, slot, paths, progress))
+                    group.create_task(
+                        _worker(plan, model, queue, next(workers), paths, progress, stop)
+                    )
     except* OllamaUnavailableError as eg:
         raise eg.exceptions[0] from None
+    finally:
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.remove_signal_handler(sig)
+    if stop.is_set():
+        raise KeyboardInterrupt
     typer.echo(f"finished {total} trajectories in {time.perf_counter() - start:.0f}s", err=True)
     return total
 
@@ -385,6 +417,7 @@ def main(
             max_iterations=max_iterations or settings.eval.max_iterations,
             temperature=settings.eval.temperature,
             workers_per_model=max(1, workers_per_model or settings.eval.workers_per_model),
+            max_tokens=settings.eval.max_tokens,
             reasoning_effort={
                 m: e for m, e in settings.models.reasoning_effort.items() if m in model_list
             },

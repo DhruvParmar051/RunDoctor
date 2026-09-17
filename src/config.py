@@ -41,6 +41,8 @@ class EvalSettings(_Frozen):
     repeats: int = 3
     max_iterations: int = 8
     workers_per_model: int = 1
+    # Per-response token cap; stops runaway generations from stalling a worker.
+    max_tokens: int = 4096
 
 
 class Settings(_Frozen):

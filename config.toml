@@ -23,3 +23,5 @@ max_iterations = 8
 # Models always run in parallel with each other. More workers per model only helps if
 # Ollama serves concurrent requests per model (OLLAMA_NUM_PARALLEL > 1).
 workers_per_model = 1
+# Cap on tokens per model response (includes qwen3 thinking). Stops runaway generations.
+max_tokens = 4096

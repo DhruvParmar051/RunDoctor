@@ -61,6 +61,7 @@ class ToolCallRequest:
 class AssistantTurn:
     content: str | None
     tool_calls: list[ToolCallRequest] = field(default_factory=list)
+    truncated: bool = False  # the model hit max_tokens
 
 
 class ChatModel(Protocol):
@@ -81,11 +82,13 @@ class OpenAIChatModel:
         temperature: float = 0.2,
         seed: int | None = None,
         reasoning_effort: str | None = None,
+        max_tokens: int | None = None,
     ) -> None:
         self.name = name
         self.temperature = temperature
         self.seed = seed
         self.reasoning_effort = reasoning_effort
+        self.max_tokens = max_tokens
         self._client = AsyncOpenAI(
             base_url=base_url or get_settings().ollama.base_url,
             api_key="ollama",  # Ollama ignores the key, the client requires one
@@ -100,6 +103,8 @@ class OpenAIChatModel:
             kwargs["seed"] = self.seed
         if self.reasoning_effort:
             kwargs["extra_body"] = {"reasoning_effort": self.reasoning_effort}
+        if self.max_tokens:
+            kwargs["max_tokens"] = self.max_tokens
         resp = await self._client.chat.completions.create(
             model=self.name,
             messages=list(messages),  # type: ignore[arg-type]
@@ -107,7 +112,8 @@ class OpenAIChatModel:
             temperature=self.temperature,
             **kwargs,
         )
-        msg = resp.choices[0].message
+        choice = resp.choices[0]
+        msg = choice.message
         calls = [
             ToolCallRequest(
                 id=tc.id or f"call_{uuid.uuid4().hex[:8]}",
@@ -117,7 +123,11 @@ class OpenAIChatModel:
             for tc in (msg.tool_calls or [])
             if tc.type == "function"
         ]
-        return AssistantTurn(content=msg.content, tool_calls=calls)
+        return AssistantTurn(
+            content=msg.content,
+            tool_calls=calls,
+            truncated=getattr(choice, "finish_reason", None) == "length",
+        )
 
 
 # --- trajectory ----------------------------------------------------------------------
@@ -145,6 +155,7 @@ class Trajectory(BaseModel):
     iterations: int = 0
     malformed_calls: int = 0
     text_tool_calls: int = 0
+    truncated_turns: int = 0  # responses cut off by max_tokens
     llm_latencies_s: list[float] = Field(default_factory=list)
     total_latency_s: float = 0.0
     error: str | None = None
@@ -345,6 +356,8 @@ class Agent:
             finally:
                 traj.llm_latencies_s.append(time.perf_counter() - t0)
 
+            if turn.truncated:
+                traj.truncated_turns += 1
             from_text = False
             if not turn.tool_calls:
                 recovered = extract_text_tool_calls(strip_thinking(turn.content))

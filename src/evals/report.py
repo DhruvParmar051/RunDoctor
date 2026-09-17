@@ -342,7 +342,9 @@ def build_report(
     lines += [
         "## Metric definitions",
         "",
-        "- **Task success:** the loop ended with an answer and every `answer_check` passed.",
+        "- **Task success:** the loop ended with an answer, tool selection was correct (see "
+        "below), and every `answer_check` passed. A right-sounding answer given without "
+        "calling the required tools is a failure.",
         "- **Tool selection:** every expected tool was called, and `launch_run`/`kill_run` "
         "were not called unless the task expected or allowed them.",
         "- **Arg acc:** fraction of `expected_args` entries matched by at least one call "

@@ -210,7 +210,7 @@ def test_openai_model_passes_reasoning_effort() -> None:
     async def fake_create(**kwargs: Any) -> Any:
         captured.update(kwargs)
         msg = SimpleNamespace(content="hi", tool_calls=None)
-        return SimpleNamespace(choices=[SimpleNamespace(message=msg)])
+        return SimpleNamespace(choices=[SimpleNamespace(message=msg, finish_reason="length")])
 
     def make(**kw: Any) -> OpenAIChatModel:
         m = OpenAIChatModel("qwen3:8b", base_url="http://127.0.0.1:9/v1", **kw)
@@ -219,14 +219,17 @@ def test_openai_model_passes_reasoning_effort() -> None:
         )
         return m
 
-    turn = asyncio.run(make(seed=1, reasoning_effort="none").complete([], []))
+    turn = asyncio.run(make(seed=1, reasoning_effort="none", max_tokens=64).complete([], []))
     assert turn.content == "hi" and turn.tool_calls == []
+    assert turn.truncated
+    assert captured["max_tokens"] == 64
     assert captured["extra_body"] == {"reasoning_effort": "none"}
     assert captured["seed"] == 1
 
     captured.clear()
     asyncio.run(make().complete([], []))
     assert "extra_body" not in captured and "seed" not in captured
+    assert "max_tokens" not in captured
 
 
 def test_text_tool_calls_are_recovered(db_path: Path) -> None:
@@ -261,3 +264,10 @@ def test_extract_text_tool_calls_ignores_prose() -> None:
     )
     assert [c.name for c in calls] == ["a", "b"]
     assert calls[1].arguments == '{"x": 1}'
+
+
+def test_truncated_turns_are_counted(db_path: Path) -> None:
+    model = ScriptedModel([AssistantTurn(content="Run 1 is ...", truncated=True)])
+    traj = run_agent(db_path, model, "diagnose run 1")
+    assert traj.truncated_turns == 1
+    assert traj.stop_reason == "answer"

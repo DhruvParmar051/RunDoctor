@@ -53,6 +53,7 @@ async def _chat(
         model,
         temperature=settings.eval.temperature,
         reasoning_effort=settings.models.reasoning_effort.get(model),
+        max_tokens=settings.eval.max_tokens,
     )
     async with connect() as session:
         agent = await Agent.create(session, llm, max_iterations=max_iterations)
