@@ -72,6 +72,14 @@ class ChatModel(Protocol):
     ) -> AssistantTurn: ...
 
 
+def make_client(base_url: str | None = None) -> AsyncOpenAI:
+    return AsyncOpenAI(
+        base_url=base_url or get_settings().ollama.base_url,
+        api_key="ollama",  # Ollama ignores the key, the client requires one
+        timeout=LLM_TIMEOUT_S,
+    )
+
+
 class OpenAIChatModel:
     """Chat model served over an OpenAI-compatible API (Ollama)."""
 
@@ -83,17 +91,15 @@ class OpenAIChatModel:
         seed: int | None = None,
         reasoning_effort: str | None = None,
         max_tokens: int | None = None,
+        client: AsyncOpenAI | None = None,
     ) -> None:
         self.name = name
         self.temperature = temperature
         self.seed = seed
         self.reasoning_effort = reasoning_effort
         self.max_tokens = max_tokens
-        self._client = AsyncOpenAI(
-            base_url=base_url or get_settings().ollama.base_url,
-            api_key="ollama",  # Ollama ignores the key, the client requires one
-            timeout=LLM_TIMEOUT_S,
-        )
+        # Pass a shared ``client`` when creating many models, so HTTP connections are reused.
+        self._client = client or make_client(base_url)
 
     async def complete(
         self, messages: Sequence[Message], tools: Sequence[Message]

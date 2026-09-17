@@ -35,6 +35,7 @@ from client.host import (
     Message,
     OpenAIChatModel,
     connect,
+    make_client,
     mcp_tools_to_openai,
     server_parameters,
 )
@@ -220,6 +221,8 @@ async def _worker(
     slot.root.mkdir(parents=True, exist_ok=True)
     async with contextlib.AsyncExitStack() as stack:
         server_log = stack.enter_context((slot.root / "server.log").open("a"))
+        http = make_client()
+        stack.push_async_callback(http.close)
         sessions: dict[str, ClientSession] = {}
         tools: dict[str, list[Message]] = {}
         try:
@@ -244,6 +247,7 @@ async def _worker(
                     seed=repeat,
                     reasoning_effort=plan.reasoning_effort.get(model),
                     max_tokens=plan.max_tokens,
+                    client=http,
                 )
                 agent = Agent(
                     sessions[variant], llm, tools[variant], max_iterations=plan.max_iterations
