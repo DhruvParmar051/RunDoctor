@@ -22,7 +22,7 @@ dev = [
 
 [project.scripts]
 rundoctor-server = "rundoctor.server:main"
-rundoctor-chat = "rundoctor.client.chat:main"
+rundoctor-chat = "rundoctor.client.chat:run"
 rundoctor-eval = "rundoctor.evals.runner:main"
 
 [build-system]
