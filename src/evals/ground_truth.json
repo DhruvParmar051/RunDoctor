@@ -1,25 +1,29 @@
 {
-  "diverging": {
+  "run-a": {
     "run_id": 1,
+    "planted_problem": "diverging",
     "expected_issues": [
       "nan_or_inf",
       "divergence"
     ]
   },
-  "overfitting": {
+  "run-b": {
     "run_id": 2,
+    "planted_problem": "overfitting",
     "expected_issues": [
       "overfitting"
     ]
   },
-  "plateau": {
+  "run-c": {
     "run_id": 3,
+    "planted_problem": "plateau",
     "expected_issues": [
       "plateau"
     ]
   },
-  "healthy": {
+  "run-d": {
     "run_id": 4,
+    "planted_problem": "healthy",
     "expected_issues": [
       "healthy"
     ]

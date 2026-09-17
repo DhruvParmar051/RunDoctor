@@ -6,9 +6,11 @@ Usage: python -m training.seed_runs [--db PATH]
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 import db
@@ -18,13 +20,23 @@ from training.train import train_run
 
 GROUND_TRUTH_PATH = Path(__file__).resolve().parents[1] / "evals" / "ground_truth.json"
 
-# name -> (config, expected issue codes)
-PLANTED_RUNS: dict[str, tuple[RunConfig, list[IssueCode]]] = {
-    "diverging": (
+
+@dataclass(frozen=True)
+class PlantedRun:
+    problem: str  # ground-truth label; deliberately NOT used as the run name
+    config: RunConfig
+    expected_issues: list[IssueCode]
+
+
+# Run names are neutral so an agent can't read the problem off list_runs; it has to diagnose.
+PLANTED_RUNS: dict[str, PlantedRun] = {
+    "run-a": PlantedRun(
+        "diverging",
         RunConfig(lr=1.0, epochs=15, batch_size=512, hidden=64, dropout=0.0, seed=1),
         ["nan_or_inf", "divergence"],
     ),
-    "overfitting": (
+    "run-b": PlantedRun(
+        "overfitting",
         RunConfig(
             lr=0.02,
             epochs=40,
@@ -38,15 +50,23 @@ PLANTED_RUNS: dict[str, tuple[RunConfig, list[IssueCode]]] = {
         ),
         ["overfitting"],
     ),
-    "plateau": (
+    "run-c": PlantedRun(
+        "plateau",
         RunConfig(lr=1e-6, epochs=15, hidden=64, dropout=0.2, seed=3),
         ["plateau"],
     ),
-    "healthy": (
+    "run-d": PlantedRun(
+        "healthy",
         RunConfig(lr=0.05, epochs=15, hidden=64, dropout=0.2, train_size=2000, seed=4),
         ["healthy"],
     ),
 }
+
+
+def planted_fingerprint() -> str:
+    """Changes whenever the planted runs' names or configs change."""
+    payload = {name: p.config.model_dump() for name, p in PLANTED_RUNS.items()}
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
 
 
 def _fmt(values: list[float | None]) -> str:
@@ -57,8 +77,8 @@ def seed(db_path: Path, verbose: bool = True, write_ground_truth: bool = True) -
     ids: dict[str, int] = {}
     with db.connection(db_path) as conn:
         db.reset_db(conn)
-        for name, (cfg, _) in PLANTED_RUNS.items():
-            run_id = db.create_run(conn, name, "signal1d", cfg)
+        for name, planted in PLANTED_RUNS.items():
+            run_id = db.create_run(conn, name, "signal1d", planted.config)
             start = time.perf_counter()
             train_run(conn, run_id)
             elapsed = time.perf_counter() - start
@@ -68,7 +88,10 @@ def seed(db_path: Path, verbose: bool = True, write_ground_truth: bool = True) -
             status = run.status if run else "?"
             if not verbose:
                 continue
-            print(f"[{run_id}] {name}: {status}, {len(epochs)} epochs, {elapsed:.1f}s")
+            print(
+                f"[{run_id}] {name} ({planted.problem}): {status}, "
+                f"{len(epochs)} epochs, {elapsed:.1f}s"
+            )
             print(f"    train_loss: {_fmt([e.train_loss for e in epochs])}")
             print(f"    val_loss:   {_fmt([e.val_loss for e in epochs])}")
             print(f"    val_acc:    {_fmt([e.val_acc for e in epochs])}")
@@ -76,8 +99,12 @@ def seed(db_path: Path, verbose: bool = True, write_ground_truth: bool = True) -
     if not write_ground_truth:
         return ids
     truth = {
-        name: {"run_id": ids[name], "expected_issues": codes}
-        for name, (_, codes) in PLANTED_RUNS.items()
+        name: {
+            "run_id": ids[name],
+            "planted_problem": planted.problem,
+            "expected_issues": planted.expected_issues,
+        }
+        for name, planted in PLANTED_RUNS.items()
     }
     GROUND_TRUTH_PATH.write_text(json.dumps(truth, indent=2) + "\n")
     return ids

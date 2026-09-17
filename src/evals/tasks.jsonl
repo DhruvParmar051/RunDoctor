@@ -1,5 +1,6 @@
 // RunDoctor eval tasks. One JSON object per line; lines starting with // are ignored.
-// Seeded state for every task: run 1 = diverging, 2 = overfitting, 3 = plateau, 4 = healthy (all completed).
+// Seeded state for every task (names are neutral on purpose): run 1 = run-a (diverging), 2 = run-b (overfitting),
+// 3 = run-c (plateau), 4 = run-d (healthy). All completed.
 //
 // TODO(author): write the remaining 28 tasks BY HAND (about 10 per category; 3 examples per category below).
 // Do not generate them with an LLM. Do not tune tool descriptions against them (tag: schemas-frozen).
@@ -17,7 +18,7 @@
 //     no_successful_call {"name": T}
 //     no_call_with_args {"name": T, "args": {...}}
 //   holdout (optional bool), notes (optional string).
-{"id": "t01", "category": "single_tool", "prompt": "List my completed runs.", "expected_tools": ["list_runs"], "expected_args": {"list_runs": {"status": "completed"}}, "answer_check": {"type": "contains_all", "values": ["diverging", "overfitting", "plateau", "healthy"]}}
+{"id": "t01", "category": "single_tool", "prompt": "List my completed runs.", "expected_tools": ["list_runs"], "expected_args": {"list_runs": {"status": "completed"}}, "answer_check": {"type": "contains_all", "values": ["run-a", "run-b", "run-c", "run-d"]}}
 {"id": "t02", "category": "single_tool", "prompt": "Show me the training curve for run 2.", "expected_tools": ["get_training_curve"], "expected_args": {"get_training_curve": {"run_id": 2}}, "answer_check": {"type": "contains_any", "values": ["2.3", "increas", "rising", "rises", "rose", "overfit"]}}
 {"id": "t03", "category": "single_tool", "prompt": "Diagnose run 3.", "expected_tools": ["diagnose_run"], "expected_args": {"diagnose_run": {"run_id": 3}}, "answer_check": {"type": "contains_any", "values": ["plateau"]}}
 {"id": "t04", "category": "single_tool", "prompt": "What's the status of each of my runs?", "expected_tools": ["list_runs"], "expected_args": {}, "answer_check": {"type": "contains_any", "values": ["completed", "finished"]}}

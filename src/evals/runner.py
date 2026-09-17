@@ -34,7 +34,7 @@ from config import get_settings
 from evals.scoring import Task, load_tasks, score
 from log import get_logger
 from server import _pid_belongs_to_run
-from training.seed_runs import seed
+from training.seed_runs import planted_fingerprint, seed
 
 log = get_logger(__name__)
 
@@ -104,13 +104,18 @@ def completed_keys(raw_dir: Path) -> set[str]:
 
 
 def ensure_template(paths: EvalPaths, reseed: bool) -> None:
-    if paths.template_db.exists() and not reseed:
+    """Seed the template DB once; rebuild it if the planted runs changed."""
+    stamp = paths.work / "template.fingerprint"
+    current = planted_fingerprint()
+    fresh = paths.template_db.exists() and stamp.exists() and stamp.read_text().strip() == current
+    if fresh and not reseed:
         return
     paths.work.mkdir(parents=True, exist_ok=True)
     for suffix in ("", "-wal", "-shm"):
         Path(f"{paths.template_db}{suffix}").unlink(missing_ok=True)
     log.info("seeding eval template DB (trains the 4 planted runs once)")
     seed(paths.template_db, verbose=False, write_ground_truth=False)
+    stamp.write_text(current + "\n")
 
 
 def stop_launched_runs(db_path: Path) -> None:
