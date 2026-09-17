@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RUNDOCTOR_LOG_LEVEL: WARNING
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install Python and dependencies
+        run: uv sync --locked
+
+      - name: Lint
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: Type check
+        run: uv run mypy
+
+      # No Ollama in CI: agent-loop tests drive the real MCP server with a scripted LLM.
+      - name: Test
+        run: uv run pytest -q
