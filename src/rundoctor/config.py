@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH_ENV = "RUNDOCTOR_CONFIG"
 DB_PATH_ENV = "RUNDOCTOR_DB"
+LOG_DIR_ENV = "RUNDOCTOR_LOG_DIR"
 
 
 class _Frozen(BaseModel):
@@ -52,7 +53,8 @@ class Settings(_Frozen):
 
     @property
     def log_dir(self) -> Path:
-        return _resolve(self.paths.log_dir)
+        override = os.environ.get(LOG_DIR_ENV)
+        return _resolve(Path(override) if override else self.paths.log_dir)
 
     @property
     def results_dir(self) -> Path:
