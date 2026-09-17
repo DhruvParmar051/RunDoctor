@@ -1,0 +1,27 @@
+{
+  "diverging": {
+    "run_id": 1,
+    "expected_issues": [
+      "nan_or_inf",
+      "divergence"
+    ]
+  },
+  "overfitting": {
+    "run_id": 2,
+    "expected_issues": [
+      "overfitting"
+    ]
+  },
+  "plateau": {
+    "run_id": 3,
+    "expected_issues": [
+      "plateau"
+    ]
+  },
+  "healthy": {
+    "run_id": 4,
+    "expected_issues": [
+      "healthy"
+    ]
+  }
+}

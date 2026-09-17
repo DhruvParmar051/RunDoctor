@@ -1,0 +1,17 @@
+[paths]
+db = "data/rundoctor.db"
+log_dir = "runs"
+results_dir = "results"
+
+[ollama]
+base_url = "http://localhost:11434/v1"
+
+[models]
+# Default: 8B-class models for 16GB RAM. Add e.g. "qwen3:14b" if you have more memory.
+eval = ["qwen3:8b", "llama3.1:8b", "mistral"]
+chat_default = "qwen3:8b"
+
+[eval]
+temperature = 0.2
+repeats = 3
+max_iterations = 8
