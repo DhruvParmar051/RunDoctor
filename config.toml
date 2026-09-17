@@ -11,6 +11,12 @@ base_url = "http://localhost:11434/v1"
 eval = ["qwen3:8b", "llama3.1:8b", "mistral"]
 chat_default = "qwen3:8b"
 
+[models.reasoning_effort]
+# "none" disables qwen3's thinking mode: several times faster, and results are recorded
+# as "qwen3:8b[reasoning=none]" so they never mix with thinking-mode results.
+# Delete the line to evaluate qwen3 with thinking on.
+"qwen3:8b" = "none"
+
 [eval]
 temperature = 0.2
 repeats = 3

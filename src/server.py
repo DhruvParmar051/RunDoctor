@@ -431,7 +431,8 @@ class _GenericErrorServer(MCPServer):
             raise ToolError("error") from exc
 
 
-Variant = Literal["good", "naive"]
+Variant = Literal["good", "naive", "v2"]
+VARIANTS: tuple[Variant, ...] = ("good", "naive", "v2")
 
 
 def build_server(
@@ -465,6 +466,10 @@ def build_server(
 def build_variant(variant: Variant) -> MCPServer:
     if variant == "good":
         return build_server()
+    if variant == "v2":
+        from evals.schemas_v2 import V2_DESCRIPTIONS
+
+        return build_server(V2_DESCRIPTIONS)
     from evals.schemas_naive import NAIVE_DESCRIPTIONS
 
     return build_server(NAIVE_DESCRIPTIONS, generic_errors=True, instructions=None)
@@ -474,7 +479,7 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="RunDoctor MCP server (stdio).")
     parser.add_argument(
         "--variant",
-        choices=["good", "naive"],
+        choices=list(VARIANTS),
         default="good",
         help="tool schema variant (naive is the eval ablation)",
     )

@@ -27,12 +27,18 @@ log = get_logger(__name__)
 TARGET_TASKS = 40
 RESULT_SNIPPET = 220
 
+V2_CAVEAT = (
+    "> v2 descriptions were written after seeing `good` results on the main tasks, so v2 "
+    "numbers on those tasks are optimistic. Use the held-out section to judge v2."
+)
+
 MAIN_COLUMNS: tuple[tuple[str, str, bool], ...] = (
     ("task_success", "Task success", True),
     ("tool_selection_acc", "Tool selection", True),
     ("arg_acc", "Arg acc", True),
     ("safety_pass", "Safety pass", True),
     ("malformed_call_rate", "Malformed calls", True),
+    ("text_call_rate", "Text calls", True),
     ("loop_rate", "Loop rate", True),
     ("avg_iterations", "Avg iters", False),
 )
@@ -113,17 +119,18 @@ def _main_table(groups: Sequence[GroupMetrics]) -> list[str]:
     return _table(header, rows)
 
 
-def _delta_table(groups: Sequence[GroupMetrics]) -> list[str]:
+def _delta_table(groups: Sequence[GroupMetrics], first: str, second: str) -> list[str]:
+    """Per-model metric differences ``first - second``."""
     by = {(g.model, g.variant): g for g in groups}
     models = sorted({g.model for g in groups})
     rows = []
     for m in models:
-        good, naive = by.get((m, "good")), by.get((m, "naive"))
-        if good is None or naive is None:
+        ga, gb = by.get((m, first)), by.get((m, second))
+        if ga is None or gb is None:
             continue
         cells = []
         for key, _, pct in MAIN_COLUMNS:
-            a, b = good.metrics[key].mean, naive.metrics[key].mean
+            a, b = ga.metrics[key].mean, gb.metrics[key].mean
             if a is None or b is None:
                 cells.append("–")
             elif pct:
@@ -132,7 +139,7 @@ def _delta_table(groups: Sequence[GroupMetrics]) -> list[str]:
                 cells.append(f"{a - b:+.2f}")
         rows.append([f"`{m}`", *cells])
     if not rows:
-        return ["_Needs both `good` and `naive` results for at least one model._"]
+        return [f"_Needs both `{first}` and `{second}` results for at least one model._"]
     return _table(["Model", *[c[1] for c in MAIN_COLUMNS]], rows)
 
 
@@ -257,8 +264,19 @@ def _section(
         "",
         "### Good − naive",
         "",
-        *_delta_table(groups),
+        *_delta_table(groups, "good", "naive"),
         "",
+    ]
+    if any(g.variant == "v2" for g in groups):
+        lines += [
+            "### v2 − good",
+            "",
+            V2_CAVEAT,
+            "",
+            *_delta_table(groups, "v2", "good"),
+            "",
+        ]
+    lines += [
         "### Task success by category",
         "",
         *_category_table(groups),
@@ -299,7 +317,7 @@ def build_report(
         f"- **Models:** {', '.join(f'`{m}`' for m in models) or '–'}",
         f"- **Variants:** {', '.join(variants) or '–'} "
         "(good = frozen descriptions + informative errors; naive = terse descriptions + "
-        "`error`)",
+        "`error`; v2 = post-hoc improved descriptions + informative errors)",
         f"- **Repeats:** {len(repeats)} · **Trajectories scored:** {len(results)}",
         "- **Scoring:** deterministic checks only (no LLM judge). See `src/evals/scoring.py`.",
         "",
@@ -331,6 +349,8 @@ def build_report(
         "that did not error (only tasks that define them).",
         "- **Safety pass:** task success on `safety` tasks.",
         "- **Loop rate:** fraction of trajectories that hit the iteration limit.",
+        "- **Text calls:** fraction of tool calls the model wrote as JSON in its message "
+        "instead of as a structured tool call; the host recovers and executes them.",
         "- **Failure classes** are assigned in priority order: malformed_json, "
         "hallucinated_tool, loop, gave_up, wrong_tool, bad_args, wrong_answer.",
         "",

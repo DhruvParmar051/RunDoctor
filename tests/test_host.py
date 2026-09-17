@@ -198,3 +198,66 @@ def test_llm_error_stops_cleanly(db_path: Path) -> None:
 def test_strip_thinking() -> None:
     assert strip_thinking("<think>\na\nb\n</think>\n\nAnswer") == "Answer"
     assert strip_thinking(None) == ""
+
+
+def test_openai_model_passes_reasoning_effort() -> None:
+    from types import SimpleNamespace
+
+    from client.host import OpenAIChatModel
+
+    captured: dict[str, Any] = {}
+
+    async def fake_create(**kwargs: Any) -> Any:
+        captured.update(kwargs)
+        msg = SimpleNamespace(content="hi", tool_calls=None)
+        return SimpleNamespace(choices=[SimpleNamespace(message=msg)])
+
+    def make(**kw: Any) -> OpenAIChatModel:
+        m = OpenAIChatModel("qwen3:8b", base_url="http://127.0.0.1:9/v1", **kw)
+        m._client = SimpleNamespace(  # type: ignore[assignment]
+            chat=SimpleNamespace(completions=SimpleNamespace(create=fake_create))
+        )
+        return m
+
+    turn = asyncio.run(make(seed=1, reasoning_effort="none").complete([], []))
+    assert turn.content == "hi" and turn.tool_calls == []
+    assert captured["extra_body"] == {"reasoning_effort": "none"}
+    assert captured["seed"] == 1
+
+    captured.clear()
+    asyncio.run(make().complete([], []))
+    assert "extra_body" not in captured and "seed" not in captured
+
+
+def test_text_tool_calls_are_recovered(db_path: Path) -> None:
+    model = ScriptedModel(
+        [
+            answer('Let me check.\n{"name": "diagnose_run", "parameters": {"run_id": 1}}'),
+            answer('```json\n{"name": "get_runs", "arguments": {}}\n```'),
+            answer("Run 1 has plateaued."),
+        ]
+    )
+    traj = run_agent(db_path, model, "diagnose run 1")
+    assert traj.stop_reason == "answer"
+    assert traj.tools_called == ["diagnose_run", "get_runs"]
+    assert all(c.from_text for c in traj.tool_calls)
+    assert traj.text_tool_calls == 2
+    assert "plateau" in traj.tool_calls[0].result
+    assert traj.tool_calls[1].error_kind == "unknown_tool"
+    assert traj.malformed_calls == 1
+    # Recovered calls are replayed as structured calls so the tool results pair up.
+    assistant = [m for m in traj.messages if m["role"] == "assistant"]
+    assert assistant[0]["tool_calls"][0]["function"]["name"] == "diagnose_run"
+
+
+def test_extract_text_tool_calls_ignores_prose() -> None:
+    from client.host import extract_text_tool_calls
+
+    assert extract_text_tool_calls("") == []
+    assert extract_text_tool_calls('Config: {"lr": 1, "name": "x"}') == []
+    assert extract_text_tool_calls("{broken") == []
+    calls = extract_text_tool_calls(
+        '{"name": "a", "parameters": {}} and {"name": "b", "arguments": {"x": 1}}'
+    )
+    assert [c.name for c in calls] == ["a", "b"]
+    assert calls[1].arguments == '{"x": 1}'

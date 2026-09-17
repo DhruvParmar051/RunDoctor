@@ -32,6 +32,8 @@ class OllamaSettings(_Frozen):
 class ModelsSettings(_Frozen):
     eval: list[str] = Field(default_factory=lambda: ["qwen3:8b", "llama3.1:8b", "mistral"])
     chat_default: str = "qwen3:8b"
+    # Per-model reasoning_effort sent to Ollama ("none" turns off qwen3's thinking mode).
+    reasoning_effort: dict[str, str] = Field(default_factory=dict)
 
 
 class EvalSettings(_Frozen):

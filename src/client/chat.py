@@ -49,7 +49,11 @@ async def _chat(
     if db is not None:
         os.environ["RUNDOCTOR_DB"] = str(db.resolve())
     settings = get_settings()
-    llm = OpenAIChatModel(model, temperature=settings.eval.temperature)
+    llm = OpenAIChatModel(
+        model,
+        temperature=settings.eval.temperature,
+        reasoning_effort=settings.models.reasoning_effort.get(model),
+    )
     async with connect() as session:
         agent = await Agent.create(session, llm, max_iterations=max_iterations)
         history = agent.new_history()

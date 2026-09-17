@@ -255,3 +255,42 @@ def test_stdio_server(db_path: Path) -> None:
             assert '"name": "good"' in res.contents[0].text  # type: ignore[union-attr]
 
     asyncio.run(run())
+
+
+# --- schema variants ---------------------------------------------------------------------
+
+
+def test_variants_share_tools_and_schemas(db_path: Path) -> None:
+    async def run() -> None:
+        listed = {v: await server.build_variant(v).list_tools() for v in server.VARIANTS}
+        schemas = {v: {t.name: t.input_schema for t in tools} for v, tools in listed.items()}
+        assert schemas["good"] == schemas["naive"] == schemas["v2"]
+        descs = {v: {t.name: t.description for t in tools} for v, tools in listed.items()}
+        assert descs["good"] != descs["v2"] != descs["naive"]
+        assert all(len(d) < 20 for d in descs["naive"].values())
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    ("variant", "expected"),
+    [
+        ("good", "Valid ids: 1-3"),
+        ("v2", "Valid ids: 1-3"),
+        ("naive", "error"),
+    ],
+)
+def test_variant_error_messages(db_path: Path, variant: str, expected: str) -> None:
+    async def run() -> str:
+        try:
+            await server.build_variant(variant).call_tool(  # type: ignore[arg-type]
+                "diagnose_run", {"run_id": 99}
+            )
+        except ToolError as exc:
+            return str(exc)
+        raise AssertionError("expected ToolError")
+
+    message = asyncio.run(run())
+    assert expected in message
+    if variant == "naive":
+        assert message == "error"

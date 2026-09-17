@@ -80,10 +80,12 @@ class OpenAIChatModel:
         base_url: str | None = None,
         temperature: float = 0.2,
         seed: int | None = None,
+        reasoning_effort: str | None = None,
     ) -> None:
         self.name = name
         self.temperature = temperature
         self.seed = seed
+        self.reasoning_effort = reasoning_effort
         self._client = AsyncOpenAI(
             base_url=base_url or get_settings().ollama.base_url,
             api_key="ollama",  # Ollama ignores the key, the client requires one
@@ -96,6 +98,8 @@ class OpenAIChatModel:
         kwargs: dict[str, Any] = {}
         if self.seed is not None:
             kwargs["seed"] = self.seed
+        if self.reasoning_effort:
+            kwargs["extra_body"] = {"reasoning_effort": self.reasoning_effort}
         resp = await self._client.chat.completions.create(
             model=self.name,
             messages=list(messages),  # type: ignore[arg-type]
@@ -128,6 +132,7 @@ class ToolCallRecord(BaseModel):
     is_error: bool
     error_kind: ErrorKind | None = None
     latency_s: float
+    from_text: bool = False  # recovered from JSON written in the message text
 
 
 class Trajectory(BaseModel):
@@ -139,6 +144,7 @@ class Trajectory(BaseModel):
     stop_reason: StopReason = "answer"
     iterations: int = 0
     malformed_calls: int = 0
+    text_tool_calls: int = 0
     llm_latencies_s: list[float] = Field(default_factory=list)
     total_latency_s: float = 0.0
     error: str | None = None
@@ -209,6 +215,36 @@ def _result_text(result: Any) -> str:
 
 def strip_thinking(text: str | None) -> str:
     return _THINK_RE.sub("", text or "").strip()
+
+
+def extract_text_tool_calls(text: str) -> list[ToolCallRequest]:
+    """Recover tool calls a model wrote as JSON text instead of structured tool_calls.
+
+    Some models (notably llama3.1) sometimes emit ``{"name": "list_runs", "parameters": {...}}``
+    in the message body. Any JSON object with a string ``name`` and an object
+    ``parameters``/``arguments`` counts; surrounding prose and code fences are ignored.
+    """
+    decoder = json.JSONDecoder()
+    calls: list[ToolCallRequest] = []
+    i = text.find("{")
+    while i != -1:
+        try:
+            obj, end = decoder.raw_decode(text, i)
+        except ValueError:
+            i = text.find("{", i + 1)
+            continue
+        if isinstance(obj, dict) and isinstance(obj.get("name"), str):
+            params = obj.get("parameters", obj.get("arguments"))
+            if isinstance(params, dict):
+                calls.append(
+                    ToolCallRequest(
+                        id=f"text_call_{uuid.uuid4().hex[:8]}",
+                        name=obj["name"],
+                        arguments=json.dumps(params),
+                    )
+                )
+        i = text.find("{", end)
+    return calls
 
 
 # --- agent ---------------------------------------------------------------------------
@@ -309,6 +345,13 @@ class Agent:
             finally:
                 traj.llm_latencies_s.append(time.perf_counter() - t0)
 
+            from_text = False
+            if not turn.tool_calls:
+                recovered = extract_text_tool_calls(strip_thinking(turn.content))
+                if recovered:
+                    turn = AssistantTurn(content=turn.content, tool_calls=recovered)
+                    from_text = True
+
             assistant: Message = {"role": "assistant", "content": turn.content or ""}
             if turn.tool_calls:
                 assistant["tool_calls"] = [
@@ -328,6 +371,9 @@ class Agent:
 
             records = [await self._execute(c, iteration) for c in turn.tool_calls]
             for call, rec in zip(turn.tool_calls, records, strict=True):
+                if from_text:
+                    rec.from_text = True
+                    traj.text_tool_calls += 1
                 traj.tool_calls.append(rec)
                 if rec.error_kind in ("malformed_json", "unknown_tool"):
                     traj.malformed_calls += 1

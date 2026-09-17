@@ -385,3 +385,23 @@ def test_report_end_to_end(tmp_path: Path) -> None:
     assert "Only 2 of the planned 40 tasks" in md
     assert "#### Success" in md and "#### Failure 1:" in md
     assert "Incomplete grid" not in md
+
+
+def test_report_v2_section(tmp_path: Path) -> None:
+    ok = traj([rec("diagnose_run", {"run_id": 3})], answer="plateau")
+    results = [
+        ScoredResult(task=DIAG3, model="m", variant=v, repeat=0, score=score(DIAG3, ok))
+        for v in ("good", "naive", "v2")
+    ]
+    trajs = {f"t|m|{v}|0": ok for v in ("good", "naive", "v2")}
+    md = build_report(results, trajs, [DIAG3])
+    assert "### v2 − good" in md and "optimistic" in md
+    md_no_v2 = build_report(results[:2], trajs, [DIAG3])
+    assert "### v2 − good" not in md_no_v2
+
+
+def test_text_call_rate() -> None:
+    tr = traj([rec("diagnose_run", {"run_id": 3})], answer="plateau")
+    tr.text_tool_calls = 1
+    (g,) = aggregate([_result(DIAG3, tr, 0)])
+    assert g.metrics["text_call_rate"].mean == 1.0

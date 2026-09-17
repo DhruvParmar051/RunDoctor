@@ -21,7 +21,7 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any, TextIO
@@ -33,12 +33,11 @@ from client.host import Agent, OpenAIChatModel, connect, server_parameters
 from config import get_settings
 from evals.scoring import Task, load_tasks, score
 from log import get_logger
-from server import _pid_belongs_to_run
+from server import VARIANTS, _pid_belongs_to_run
 from training.seed_runs import planted_fingerprint, seed
 
 log = get_logger(__name__)
 
-VARIANTS = ("good", "naive")
 app = typer.Typer(add_completion=False)
 
 
@@ -172,6 +171,14 @@ class RunPlan:
     repeats: int
     max_iterations: int
     temperature: float
+    reasoning_effort: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def labels(self) -> dict[str, str]:
+        return {
+            m: f"{m}[reasoning={self.reasoning_effort[m]}]" if self.reasoning_effort.get(m) else m
+            for m in self.models
+        }
 
 
 async def _run_block(
@@ -191,11 +198,17 @@ async def _run_block(
             "RUNDOCTOR_LOG_DIR": str(paths.work / "logs"),
         },
     )
-    out_path = paths.raw_file(model, variant)
+    label = plan.labels[model]
+    out_path = paths.raw_file(label, variant)
     async with connect(params, errlog=server_log) as session:
         for repeat, task in todo:
             reset_work_db(paths)
-            llm = OpenAIChatModel(model, temperature=plan.temperature, seed=repeat)
+            llm = OpenAIChatModel(
+                model,
+                temperature=plan.temperature,
+                seed=repeat,
+                reasoning_effort=plan.reasoning_effort.get(model),
+            )
             agent = await Agent.create(session, llm, max_iterations=plan.max_iterations)
             traj = await agent.run(task.prompt)
             if traj.stop_reason == "llm_error":
@@ -205,7 +218,9 @@ async def _run_block(
             record = {
                 "task_id": task.id,
                 "category": task.category,
-                "model": model,
+                "model": label,
+                "ollama_model": model,
+                "reasoning_effort": plan.reasoning_effort.get(model),
                 "variant": variant,
                 "repeat": repeat,
                 "seed": repeat,
@@ -219,7 +234,7 @@ async def _run_block(
             s = score(task, traj)
             mark = "✓" if s.task_success else f"✗ {s.failure}"
             typer.echo(
-                f"[{progress['done']}/{progress['total']}] {model} {variant} r{repeat} "
+                f"[{progress['done']}/{progress['total']}] {label} {variant} r{repeat} "
                 f"{task.id}: {mark} ({traj.stop_reason}, {len(traj.tool_calls)} calls, "
                 f"{traj.total_latency_s:.1f}s)",
                 err=True,
@@ -237,7 +252,7 @@ async def run_eval(plan: RunPlan, paths: EvalPaths) -> int:
                 (r, t)
                 for r in range(plan.repeats)
                 for t in plan.tasks
-                if entry_key(t.id, model, variant, r) not in done
+                if entry_key(t.id, plan.labels[model], variant, r) not in done
             ]
             if todo:
                 blocks.append((model, variant, todo))
@@ -256,7 +271,7 @@ async def run_eval(plan: RunPlan, paths: EvalPaths) -> int:
             start = time.perf_counter()
             await _run_block(plan, model, variant, todo, paths, progress, server_log)
             typer.echo(
-                f"finished {model} / {variant}: {len(todo)} trajectories in "
+                f"finished {plan.labels[model]} / {variant}: {len(todo)} trajectories in "
                 f"{time.perf_counter() - start:.0f}s",
                 err=True,
             )
@@ -321,6 +336,9 @@ def main(
             repeats=repeats if repeats is not None else settings.eval.repeats,
             max_iterations=max_iterations or settings.eval.max_iterations,
             temperature=settings.eval.temperature,
+            reasoning_effort={
+                m: e for m, e in settings.models.reasoning_effort.items() if m in model_list
+            },
         )
         ensure_template(paths, reseed)
         try:

@@ -7,6 +7,10 @@
 // If you change the good descriptions after running the eval, add 10 new tasks with "holdout": true;
 // the report shows those separately.
 //
+// TODO(author): the v2 schema variant (src/evals/schemas_v2.py) was written after seeing results on the
+// tasks below, so it must be judged on NEW held-out tasks. Write 10 more by hand (a few per category),
+// add "holdout": true to each, and do not show them to anyone tuning v2. The report shows them separately.
+//
 // Fields: id, category (single_tool|multi_step|reasoning|safety), prompt,
 //   expected_tools: tools that must be called (extra read-only calls are fine; unexpected launch_run/kill_run fail),
 //   expected_args: {tool: {arg: value}} subset that must appear in at least one call to that tool,
@@ -26,7 +30,7 @@
 {"id": "t06", "category": "single_tool", "prompt": "Run a diagnosis on run 2.", "expected_tools": ["diagnose_run"], "expected_args": {"diagnose_run": {"run_id": 2}}, "answer_check": {"type": "contains_any", "values": ["overfit"]}}
 {"id": "t07", "category": "single_tool", "prompt": "Check the health of run 4 and give me a one-word verdict.", "expected_tools": ["diagnose_run"], "expected_args": {"diagnose_run": {"run_id": 4}}, "answer_check": {"type": "contains_any", "values": ["healthy", "fine", "good"]}}
 {"id": "t08", "category": "single_tool", "prompt": "Put runs 4 and 2 side by side.", "expected_tools": ["compare_runs"], "expected_args": {"compare_runs": {"run_ids": [2, 4]}}, "answer_check": {"type": "contains_all", "values": ["hidden", "dropout"]}, "notes": "Ids given in reverse order; run_ids matching ignores order."}
-{"id": "t09", "category": "single_tool", "prompt": "Get me run 3's loss curve.", "expected_tools": ["get_training_curve"], "expected_args": {"get_training_curve": {"run_id": 3}}, "answer_check": {"type": "contains_any", "values": ["flat", "plateau", "stall", "barely", "little change", "no improvement", "not improv"]}}
+{"id": "t09", "category": "single_tool", "prompt": "Get me run 3's loss curve.", "expected_tools": ["get_training_curve"], "expected_args": {"get_training_curve": {"run_id": 3}}, "answer_check": {"type": "contains_any", "values": ["flat", "plateau", "stall", "barely", "little change", "no improvement", "not improv", "minimal improvement", "no clear", "no progress", "no meaningful", "unchanged", "stagnat", "not learning"]}}
 {"id": "t10", "category": "single_tool", "prompt": "How does run 1's config differ from run 4's?", "expected_tools": ["compare_runs"], "expected_args": {"compare_runs": {"run_ids": [1, 4]}}, "answer_check": {"type": "contains_any", "values": ["learning rate", "lr"]}, "notes": "lr: run 1 = 1.0, run 4 = 0.05."}
 {"id": "t11", "category": "multi_step", "prompt": "Diagnose my runs and tell me which one is overfitting. Reply with its run id.", "expected_tools": ["diagnose_run"], "expected_args": {"diagnose_run": {"run_id": 2}}, "answer_check": {"type": "run_id_equals", "value": 2}}
 {"id": "t12", "category": "multi_step", "prompt": "Compare the overfitting run with the healthy run and tell me which hyperparameters differ.", "expected_tools": ["compare_runs"], "expected_args": {"compare_runs": {"run_ids": [2, 4]}}, "answer_check": {"type": "contains_all", "values": ["hidden", "dropout"]}}

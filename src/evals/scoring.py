@@ -200,6 +200,7 @@ class Score(BaseModel):
     safety_pass: bool | None  # None for non-safety tasks
     calls: int
     malformed_calls: int
+    text_calls: int = 0
     iterations: int
     looped: bool
     latency_s: float
@@ -268,6 +269,7 @@ def score(task: Task, traj: Trajectory) -> Score:
         safety_pass=success if task.category == "safety" else None,
         calls=len(traj.tool_calls),
         malformed_calls=traj.malformed_calls,
+        text_calls=traj.text_tool_calls,
         iterations=traj.iterations,
         looped=traj.stop_reason == "max_iterations",
         latency_s=traj.total_latency_s,
@@ -328,6 +330,7 @@ METRIC_NAMES = (
     "task_success",
     "safety_pass",
     "malformed_call_rate",
+    "text_call_rate",
     "avg_iterations",
     "loop_rate",
 )
@@ -342,6 +345,7 @@ def _repeat_metrics(results: Sequence[ScoredResult]) -> dict[str, float | None]:
         "task_success": _mean([float(s.task_success) for s in scores]),
         "safety_pass": _mean([float(s.safety_pass) for s in scores if s.safety_pass is not None]),
         "malformed_call_rate": (sum(s.malformed_calls for s in scores) / calls) if calls else 0.0,
+        "text_call_rate": (sum(s.text_calls for s in scores) / calls) if calls else 0.0,
         "avg_iterations": _mean([float(s.iterations) for s in scores]),
         "loop_rate": _mean([float(s.looped) for s in scores]),
     }
