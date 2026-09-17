@@ -50,6 +50,8 @@ Inspect the server directly with the MCP Inspector:
 npx @modelcontextprotocol/inspector uv run rundoctor-server
 ```
 
+![MCP Inspector showing the 6 RunDoctor tools and a diagnose_run result for run 1](docs/inspector.png)
+
 ### The planted runs
 
 `seed_runs` trains four tiny Conv1d classifiers, each with a known problem. The names are deliberately neutral, so an agent has to call `diagnose_run` instead of reading the answer off the run list.
